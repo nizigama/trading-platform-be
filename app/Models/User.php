@@ -4,6 +4,7 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
@@ -21,6 +22,7 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'balance',
     ];
 
     /**
@@ -43,6 +45,39 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'balance' => 'decimal:18',
         ];
+    }
+
+    /**
+     * Get the assets owned by the user.
+     */
+    public function assets(): HasMany
+    {
+        return $this->hasMany(Asset::class);
+    }
+
+    /**
+     * Get the orders placed by the user.
+     */
+    public function orders(): HasMany
+    {
+        return $this->hasMany(Order::class);
+    }
+
+    /**
+     * Get the trades where user is buyer.
+     */
+    public function buyTrades(): HasMany
+    {
+        return $this->hasMany(Trade::class, 'buyer_id');
+    }
+
+    /**
+     * Get the trades where user is seller.
+     */
+    public function sellTrades(): HasMany
+    {
+        return $this->hasMany(Trade::class, 'seller_id');
     }
 }
