@@ -1,11 +1,13 @@
 <?php
 
 use App\Enums\OrderStatus;
+use App\Events\OrderMatched;
 use App\Jobs\MatchOrderJob;
 use App\Models\Asset;
 use App\Models\Order;
 use App\Models\Symbol;
 use App\Models\User;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Queue;
 
 beforeEach(function () {
@@ -399,6 +401,124 @@ describe('MatchOrderJob', function () {
             'amount' => '0.010000000000000000',
             'commission' => '14.250000000000000000',
         ]);
+    });
+
+    it('broadcasts OrderMatched event to both buyer and seller on successful match', function () {
+        Event::fake([OrderMatched::class]);
+
+        $buyer = User::factory()->create([
+            'balance' => '0.00',
+            'locked_balance' => '950.00',
+        ]);
+
+        $seller = User::factory()->create([
+            'balance' => '0.00',
+        ]);
+
+        Asset::factory()->create([
+            'user_id' => $seller->id,
+            'symbol_id' => $this->symbol->id,
+            'amount' => '0.0',
+            'locked_amount' => '0.01',
+        ]);
+
+        $sellOrder = Order::factory()->open()->sell()->create([
+            'user_id' => $seller->id,
+            'symbol_id' => $this->symbol->id,
+            'price' => '95000.00',
+            'amount' => '0.01',
+        ]);
+
+        $buyOrder = Order::factory()->open()->buy()->create([
+            'user_id' => $buyer->id,
+            'symbol_id' => $this->symbol->id,
+            'price' => '95000.00',
+            'amount' => '0.01',
+        ]);
+
+        // Dispatch and handle the job
+        $job = new MatchOrderJob($buyOrder);
+        $job->handle(app(\App\Services\OrderService::class));
+
+        // Assert OrderMatched was broadcast twice (once for buyer, once for seller)
+        Event::assertDispatched(OrderMatched::class, 2);
+
+        // Assert broadcast to buyer
+        Event::assertDispatched(OrderMatched::class, function ($event) use ($buyer) {
+            return $event->order->user_id === $buyer->id;
+        });
+
+        // Assert broadcast to seller
+        Event::assertDispatched(OrderMatched::class, function ($event) use ($seller) {
+            return $event->order->user_id === $seller->id;
+        });
+    });
+
+    it('broadcasts OrderMatched event on private user channel', function () {
+        Event::fake([OrderMatched::class]);
+
+        $buyer = User::factory()->create([
+            'balance' => '0.00',
+            'locked_balance' => '950.00',
+        ]);
+
+        $seller = User::factory()->create([
+            'balance' => '0.00',
+        ]);
+
+        Asset::factory()->create([
+            'user_id' => $seller->id,
+            'symbol_id' => $this->symbol->id,
+            'amount' => '0.0',
+            'locked_amount' => '0.01',
+        ]);
+
+        Order::factory()->open()->sell()->create([
+            'user_id' => $seller->id,
+            'symbol_id' => $this->symbol->id,
+            'price' => '95000.00',
+            'amount' => '0.01',
+        ]);
+
+        $buyOrder = Order::factory()->open()->buy()->create([
+            'user_id' => $buyer->id,
+            'symbol_id' => $this->symbol->id,
+            'price' => '95000.00',
+            'amount' => '0.01',
+        ]);
+
+        $job = new MatchOrderJob($buyOrder);
+        $job->handle(app(\App\Services\OrderService::class));
+
+        // Verify the event broadcasts on the correct private channel
+        Event::assertDispatched(OrderMatched::class, function ($event) {
+            $channels = $event->broadcastOn();
+
+            return count($channels) === 1
+                && $channels[0]->name === 'private-private-user.'.$event->order->user_id;
+        });
+    });
+
+    it('does not broadcast OrderMatched when no match occurs', function () {
+        Event::fake([OrderMatched::class]);
+
+        $buyer = User::factory()->create([
+            'balance' => '0.00',
+            'locked_balance' => '950.00',
+        ]);
+
+        // Buy order with no matching sell order
+        $buyOrder = Order::factory()->open()->buy()->create([
+            'user_id' => $buyer->id,
+            'symbol_id' => $this->symbol->id,
+            'price' => '95000.00',
+            'amount' => '0.01',
+        ]);
+
+        $job = new MatchOrderJob($buyOrder);
+        $job->handle(app(\App\Services\OrderService::class));
+
+        Event::assertNotDispatched(OrderMatched::class);
     });
 
     it('handles deleted order gracefully', function () {
