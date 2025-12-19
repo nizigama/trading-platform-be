@@ -53,7 +53,7 @@ class OrderService
      */
     public function createOrder(User $user, array $data): void
     {
-        DB::transaction(function () use ($user, $data) {
+        $order = DB::transaction(function () use ($user, $data) {
             $symbol = Symbol::find($data['symbol_id']);
             $side = $data['side'];
             $price = $this->toDecimal($data['price']);
@@ -89,7 +89,7 @@ class OrderService
                 ]);
             }
 
-            $order = Order::create([
+            return Order::create([
                 'user_id' => $user->id,
                 'symbol_id' => $symbol->id,
                 'side' => $side,
@@ -97,9 +97,9 @@ class OrderService
                 'amount' => $amount,
                 'status' => OrderStatus::Open,
             ]);
-
-            MatchOrderJob::dispatch($order);
         });
+
+        MatchOrderJob::dispatch($order);
     }
 
     /**
@@ -148,14 +148,25 @@ class OrderService
     {
 
         $rate = config('app.sale_commission_rate');
-        
+
         $amount = $this->toDecimal($buyOrder->amount);
         $tradeValue = bcmul($executionPrice, $amount, 18);
         $commission = bcmul($tradeValue, $rate, 18);
         $sellerProceeds = bcsub($tradeValue, $commission, 18);
 
-        $buyer = User::lockForUpdate()->find($buyOrder->user_id);
-        $seller = User::lockForUpdate()->find($sellOrder->user_id);
+        // Lock users in consistent order (by ID) to prevent deadlocks
+        // when two users trade with each other simultaneously
+        $userIds = [$buyOrder->user_id, $sellOrder->user_id];
+        sort($userIds);
+        
+        $lockedUsers = User::lockForUpdate()
+            ->whereIn('id', $userIds)
+            ->orderBy('id')
+            ->get()
+            ->keyBy('id');
+        
+        $buyer = $lockedUsers[$buyOrder->user_id];
+        $seller = $lockedUsers[$sellOrder->user_id];
 
         // Calculate the buyer's originally locked amount
         $buyerLockedAmount = bcmul($this->toDecimal($buyOrder->price), $this->toDecimal($buyOrder->amount), 18);
