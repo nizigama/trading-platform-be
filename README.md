@@ -48,13 +48,13 @@ docker run --rm \
 
 - Update the pusher credentials in the .env file
     ```shell
-    PUSHER_APP_ID=2093100
-    PUSHER_APP_KEY=45a87eb2b942a4d2abbb
-    PUSHER_APP_SECRET=97a9825a8263355f3760
-    PUSHER_APP_CLUSTER=eu
+    PUSHER_APP_ID=
+    PUSHER_APP_KEY=
+    PUSHER_APP_SECRET=
+    PUSHER_APP_CLUSTER=
     PUSHER_PORT=443
     PUSHER_SCHEME=https
     ```
 
-The frontend is a Vue 3 application available here https://docs.docker.com/get-started/get-docker/, check its README for setup instructions.
+The frontend is a Vue 3 application available here https://github.com/nizigama/trading-platform-fe, check its README for setup instructions.
 The API will be available at http://localhost:8975 and the frontend will be available at http://localhost:5173 unless the port is not available and vite assigned the frontend app a new one, in that case remember to update the variables `FRONTEND_URL` and `SANCTUM_STATEFUL_DOMAINS` in the .env file of this api app accordingly.
