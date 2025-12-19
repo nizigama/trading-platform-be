@@ -832,18 +832,18 @@ describe('Order Matching', function () {
         $sellOrder->refresh();
         expect($sellOrder->status)->toBe(OrderStatus::Filled);
 
-        // Check balances - trade executed at seller's price (95000)
-        // Trade value: 0.01 * 95000 = 950 USD
-        // Commission: 950 * 0.015 = 14.25 USD (deducted from seller)
+        // Check balances - trade executed at buyer's price (96000)
+        // Trade value: 0.01 * 96000 = 960 USD
+        // Commission: 960 * 0.015 = 14.40 USD (deducted from seller)
         $buyer->refresh();
         $seller->refresh();
 
-        // Buyer: locked 960 (96000 * 0.01), refunded 10 (960 - 950)
-        expect($buyer->balance)->toBe('9050.000000000000000000'); // 10000 - 960 + 10 = 9050
+        // Buyer: locked 960 (96000 * 0.01), no refund since execution at buyer's price
+        expect($buyer->balance)->toBe('9040.000000000000000000'); // 10000 - 960 = 9040
         expect($buyer->locked_balance)->toBe('0.000000000000000000');
 
-        // Seller: receives 950 - 14.25 = 935.75
-        expect($seller->balance)->toBe('935.750000000000000000');
+        // Seller: receives 960 - 14.40 = 945.60
+        expect($seller->balance)->toBe('945.600000000000000000');
 
         // Check asset transfers
         $sellerAsset->refresh();

@@ -47,7 +47,8 @@ class MatchOrderJob implements ShouldQueue
                     ->first();
 
                 if ($matchingSellOrder) {
-                    $trade = $orderService->executeTrade($order, $matchingSellOrder, $matchingSellOrder->price);
+                    // Always execute at buyer's price (benefits the seller when buyer offers more)
+                    $trade = $orderService->executeTrade($order, $matchingSellOrder, $order->price);
 
                     // Broadcast to both buyer and seller
                     broadcast(new OrderMatched($order->fresh(), $trade));

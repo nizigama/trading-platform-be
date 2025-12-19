@@ -84,12 +84,12 @@ describe('MatchOrderJob', function () {
         $buyer->refresh();
         $seller->refresh();
 
-        // Buyer: locked 960, trade at 950, refund 10
-        expect($buyer->balance)->toBe('10.000000000000000000');
+        // Buyer: locked 960, trade at buyer's price 960, no refund
+        expect($buyer->balance)->toBe('0.000000000000000000');
         expect($buyer->locked_balance)->toBe('0.000000000000000000');
 
-        // Seller: receives 950 - 14.25 = 935.75
-        expect($seller->balance)->toBe('935.750000000000000000');
+        // Seller: receives 960 - 14.40 (960 * 0.015) = 945.60
+        expect($seller->balance)->toBe('945.600000000000000000');
 
         // Check asset transfers
         $sellerAsset->refresh();
