@@ -23,6 +23,7 @@ class User extends Authenticatable
         'email',
         'password',
         'balance',
+        'locked_balance',
     ];
 
     /**
@@ -46,6 +47,7 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'balance' => 'decimal:18',
+            'locked_balance' => 'decimal:18',
         ];
     }
 

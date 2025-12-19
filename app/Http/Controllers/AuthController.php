@@ -16,6 +16,8 @@ class AuthController extends Controller
             'password' => 'required|string|min:8|confirmed',
         ]);
 
+        $validated['balance'] = 1000000;
+
         $user = User::create($validated);
         Auth::login($user);
 

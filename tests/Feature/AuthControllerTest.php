@@ -18,6 +18,10 @@ it('can register a user', function () {
         'name' => 'Test User',
     ]);
 
+    // Verify initial balance is set
+    $user = User::where('email', 'test@example.com')->first();
+    expect($user->balance)->toBe('1000000.000000000000000000');
+
     $this->assertAuthenticated();
 });
 
