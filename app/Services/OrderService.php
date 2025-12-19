@@ -142,7 +142,7 @@ class OrderService
      * Execute a trade between a buy order and a sell order.
      * Uses the maker's price (passed as parameter).
      */
-    public function executeTrade(Order $buyOrder, Order $sellOrder, string $executionPrice): void
+    public function executeTrade(Order $buyOrder, Order $sellOrder, string $executionPrice): Trade
     {
 
         $rate = config('app.sale_commission_rate');
@@ -207,7 +207,7 @@ class OrderService
         }
 
         // Create trade record
-        Trade::create([
+        $trade = Trade::create([
             'order_id' => $buyOrder->id,
             'buyer_id' => $buyer->id,
             'seller_id' => $seller->id,
@@ -220,6 +220,8 @@ class OrderService
         // Mark both orders as filled
         $buyOrder->update(['status' => OrderStatus::Filled]);
         $sellOrder->update(['status' => OrderStatus::Filled]);
+
+        return $trade;
     }
 
     /**

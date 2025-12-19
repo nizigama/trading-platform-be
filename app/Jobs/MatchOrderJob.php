@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Enums\OrderStatus;
+use App\Events\OrderMatched;
 use App\Models\Order;
 use App\Services\OrderService;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -46,7 +47,11 @@ class MatchOrderJob implements ShouldQueue
                     ->first();
 
                 if ($matchingSellOrder) {
-                    $orderService->executeTrade($order, $matchingSellOrder, $matchingSellOrder->price);
+                    $trade = $orderService->executeTrade($order, $matchingSellOrder, $matchingSellOrder->price);
+
+                    // Broadcast to both buyer and seller
+                    broadcast(new OrderMatched($order->fresh(), $trade));
+                    broadcast(new OrderMatched($matchingSellOrder->fresh(), $trade));
                 }
             } else {
                 $matchingBuyOrder = Order::lockForUpdate()
@@ -61,7 +66,11 @@ class MatchOrderJob implements ShouldQueue
                     ->first();
 
                 if ($matchingBuyOrder) {
-                    $orderService->executeTrade($matchingBuyOrder, $order, $matchingBuyOrder->price);
+                    $trade = $orderService->executeTrade($matchingBuyOrder, $order, $matchingBuyOrder->price);
+
+                    // Broadcast to both buyer and seller
+                    broadcast(new OrderMatched($matchingBuyOrder->fresh(), $trade));
+                    broadcast(new OrderMatched($order->fresh(), $trade));
                 }
             }
         });
