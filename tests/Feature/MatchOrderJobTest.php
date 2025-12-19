@@ -375,7 +375,7 @@ describe('MatchOrderJob', function () {
             'locked_amount' => '0.01',
         ]);
 
-        Order::factory()->open()->sell()->create([
+        $sellOrder = Order::factory()->open()->sell()->create([
             'user_id' => $seller->id,
             'symbol_id' => $this->symbol->id,
             'price' => '95000.00',
@@ -394,12 +394,63 @@ describe('MatchOrderJob', function () {
         $job->handle(app(\App\Services\OrderService::class));
 
         $this->assertDatabaseHas('trades', [
+            'order_id' => $buyOrder->id,
+            'sell_order_id' => $sellOrder->id,
             'buyer_id' => $buyer->id,
             'seller_id' => $seller->id,
             'symbol_id' => $this->symbol->id,
             'price' => '95000.000000000000000000',
             'amount' => '0.010000000000000000',
             'commission' => '14.250000000000000000',
+        ]);
+    });
+
+    it('creates trade with correct sell_order_id when sell price differs from execution price', function () {
+        $buyer = User::factory()->create([
+            'balance' => '0.00',
+            'locked_balance' => '950.00', // Locked at buyer's price
+        ]);
+
+        $seller = User::factory()->create([
+            'balance' => '0.00',
+        ]);
+
+        Asset::factory()->create([
+            'user_id' => $seller->id,
+            'symbol_id' => $this->symbol->id,
+            'amount' => '0.0',
+            'locked_amount' => '0.01',
+        ]);
+
+        // Existing buy order at 95000 (maker)
+        $buyOrder = Order::factory()->open()->buy()->create([
+            'user_id' => $buyer->id,
+            'symbol_id' => $this->symbol->id,
+            'price' => '95000.00',
+            'amount' => '0.01',
+        ]);
+
+        // New sell order at lower price 94000 (taker)
+        $sellOrder = Order::factory()->open()->sell()->create([
+            'user_id' => $seller->id,
+            'symbol_id' => $this->symbol->id,
+            'price' => '94000.00',
+            'amount' => '0.01',
+        ]);
+
+        // Dispatch and handle the job for sell order
+        $job = new MatchOrderJob($sellOrder);
+        $job->handle(app(\App\Services\OrderService::class));
+
+        // Trade should be at buyer's price (95000), with correct order IDs
+        $this->assertDatabaseHas('trades', [
+            'order_id' => $buyOrder->id,
+            'sell_order_id' => $sellOrder->id,
+            'buyer_id' => $buyer->id,
+            'seller_id' => $seller->id,
+            'price' => '95000.000000000000000000', // Executed at maker's (buyer's) price
+            'amount' => '0.010000000000000000',
+            'commission' => '14.250000000000000000', // 950 * 0.015
         ]);
     });
 

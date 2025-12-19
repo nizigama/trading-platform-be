@@ -17,6 +17,7 @@ class Trade extends Model
      */
     protected $fillable = [
         'order_id',
+        'sell_order_id',
         'buyer_id',
         'seller_id',
         'symbol_id',
@@ -40,11 +41,19 @@ class Trade extends Model
     }
 
     /**
-     * Get the order that generated this trade.
+     * Get the buy order that generated this trade.
      */
     public function order(): BelongsTo
     {
         return $this->belongsTo(Order::class);
+    }
+
+    /**
+     * Get the sell order for this trade.
+     */
+    public function sellOrder(): BelongsTo
+    {
+        return $this->belongsTo(Order::class, 'sell_order_id');
     }
 
     /**

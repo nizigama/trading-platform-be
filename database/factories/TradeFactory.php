@@ -28,6 +28,7 @@ class TradeFactory extends Factory
 
         return [
             'order_id' => Order::factory(),
+            'sell_order_id' => Order::factory(),
             'buyer_id' => User::factory(),
             'seller_id' => User::factory(),
             'symbol_id' => Symbol::factory(),

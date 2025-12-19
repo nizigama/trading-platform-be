@@ -117,7 +117,7 @@ describe('GET /api/orders', function () {
             ->assertJsonCount(1, 'sell_orders');
     });
 
-    it('includes status and commission fields in order response', function () {
+    it('includes status, commission, and executed_price fields in order response', function () {
         $user = User::factory()->create();
 
         Order::factory()->open()->buy()->create([
@@ -133,7 +133,7 @@ describe('GET /api/orders', function () {
             ->assertJsonStructure([
                 'symbol',
                 'buy_orders' => [
-                    ['id', 'side', 'price', 'amount', 'status', 'commission', 'created_at'],
+                    ['id', 'side', 'price', 'amount', 'status', 'commission', 'executed_price', 'created_at'],
                 ],
             ]);
     });
@@ -142,8 +142,15 @@ describe('GET /api/orders', function () {
         $user = User::factory()->create();
         $otherUser = User::factory()->create();
 
-        $order = Order::factory()->filled()->sell()->create([
+        $sellOrder = Order::factory()->filled()->sell()->create([
             'user_id' => $user->id,
+            'symbol_id' => $this->symbol->id,
+            'price' => '95000.00',
+            'amount' => '0.01',
+        ]);
+
+        $buyOrder = Order::factory()->filled()->buy()->create([
+            'user_id' => $otherUser->id,
             'symbol_id' => $this->symbol->id,
             'price' => '95000.00',
             'amount' => '0.01',
@@ -151,7 +158,8 @@ describe('GET /api/orders', function () {
 
         // Create a trade for the filled order
         Trade::factory()->create([
-            'order_id' => $order->id,
+            'order_id' => $buyOrder->id,
+            'sell_order_id' => $sellOrder->id,
             'buyer_id' => $otherUser->id,
             'seller_id' => $user->id,
             'symbol_id' => $this->symbol->id,
@@ -186,8 +194,15 @@ describe('GET /api/orders', function () {
         $user = User::factory()->create();
         $otherUser = User::factory()->create();
 
-        $order = Order::factory()->filled()->buy()->create([
+        $buyOrder = Order::factory()->filled()->buy()->create([
             'user_id' => $user->id,
+            'symbol_id' => $this->symbol->id,
+            'price' => '95000.00',
+            'amount' => '0.01',
+        ]);
+
+        $sellOrder = Order::factory()->filled()->sell()->create([
+            'user_id' => $otherUser->id,
             'symbol_id' => $this->symbol->id,
             'price' => '95000.00',
             'amount' => '0.01',
@@ -195,7 +210,8 @@ describe('GET /api/orders', function () {
 
         // Create a trade for the filled order
         Trade::factory()->create([
-            'order_id' => $order->id,
+            'order_id' => $buyOrder->id,
+            'sell_order_id' => $sellOrder->id,
             'buyer_id' => $user->id,
             'seller_id' => $otherUser->id,
             'symbol_id' => $this->symbol->id,
@@ -208,6 +224,357 @@ describe('GET /api/orders', function () {
 
         $response->assertStatus(200)
             ->assertJsonPath('buy_orders.0.commission', null);
+    });
+
+    it('returns commission when sell order price is lower than execution price', function () {
+        $seller = User::factory()->create();
+        $buyer = User::factory()->create();
+
+        // Sell order placed at 94000, but trade executed at buyer's price of 95000
+        $sellOrder = Order::factory()->filled()->sell()->create([
+            'user_id' => $seller->id,
+            'symbol_id' => $this->symbol->id,
+            'price' => '94000.00', // Seller's asking price
+            'amount' => '0.01',
+        ]);
+
+        $buyOrder = Order::factory()->filled()->buy()->create([
+            'user_id' => $buyer->id,
+            'symbol_id' => $this->symbol->id,
+            'price' => '95000.00', // Buyer's price (maker price)
+            'amount' => '0.01',
+        ]);
+
+        // Trade executed at buyer's (maker) price of 95000, not seller's price of 94000
+        // Trade value: 0.01 * 95000 = 950 USD
+        // Commission: 950 * 0.015 = 14.25 USD
+        Trade::factory()->create([
+            'order_id' => $buyOrder->id,
+            'sell_order_id' => $sellOrder->id,
+            'buyer_id' => $buyer->id,
+            'seller_id' => $seller->id,
+            'symbol_id' => $this->symbol->id,
+            'price' => '95000.00', // Execution price (buyer's price)
+            'amount' => '0.01',
+            'commission' => '14.25',
+        ]);
+
+        $response = $this->actingAs($seller)->getJson('/api/orders?symbol=BTC');
+
+        $response->assertStatus(200)
+            ->assertJsonPath('sell_orders.0.commission', '14.250000000000000000');
+    });
+
+    it('returns correct commission for each sell order when user has multiple orders with same amount', function () {
+        $seller = User::factory()->create();
+        $buyer = User::factory()->create();
+
+        // First sell order at 94000
+        $sellOrder1 = Order::factory()->filled()->sell()->create([
+            'user_id' => $seller->id,
+            'symbol_id' => $this->symbol->id,
+            'price' => '94000.00',
+            'amount' => '0.01',
+        ]);
+
+        // Second sell order at 96000 (same amount, different price)
+        $sellOrder2 = Order::factory()->filled()->sell()->create([
+            'user_id' => $seller->id,
+            'symbol_id' => $this->symbol->id,
+            'price' => '96000.00',
+            'amount' => '0.01',
+        ]);
+
+        $buyOrder1 = Order::factory()->filled()->buy()->create([
+            'user_id' => $buyer->id,
+            'symbol_id' => $this->symbol->id,
+            'price' => '95000.00',
+            'amount' => '0.01',
+        ]);
+
+        $buyOrder2 = Order::factory()->filled()->buy()->create([
+            'user_id' => $buyer->id,
+            'symbol_id' => $this->symbol->id,
+            'price' => '96000.00',
+            'amount' => '0.01',
+        ]);
+
+        // Trade 1: executed at 95000, commission = 950 * 0.015 = 14.25
+        Trade::factory()->create([
+            'order_id' => $buyOrder1->id,
+            'sell_order_id' => $sellOrder1->id,
+            'buyer_id' => $buyer->id,
+            'seller_id' => $seller->id,
+            'symbol_id' => $this->symbol->id,
+            'price' => '95000.00',
+            'amount' => '0.01',
+            'commission' => '14.25',
+        ]);
+
+        // Trade 2: executed at 96000, commission = 960 * 0.015 = 14.40
+        Trade::factory()->create([
+            'order_id' => $buyOrder2->id,
+            'sell_order_id' => $sellOrder2->id,
+            'buyer_id' => $buyer->id,
+            'seller_id' => $seller->id,
+            'symbol_id' => $this->symbol->id,
+            'price' => '96000.00',
+            'amount' => '0.01',
+            'commission' => '14.40',
+        ]);
+
+        $response = $this->actingAs($seller)->getJson('/api/orders?symbol=BTC');
+
+        $response->assertStatus(200);
+
+        // Orders are sorted by price desc, so 96000 order comes first
+        $sellOrders = $response->json('sell_orders');
+        expect($sellOrders)->toHaveCount(2);
+        expect($sellOrders[0]['commission'])->toBe('14.400000000000000000'); // 96000 order
+        expect($sellOrders[1]['commission'])->toBe('14.250000000000000000'); // 94000 order
+    });
+
+    it('returns null commission for cancelled sell orders', function () {
+        $user = User::factory()->create();
+
+        Order::factory()->cancelled()->sell()->create([
+            'user_id' => $user->id,
+            'symbol_id' => $this->symbol->id,
+            'price' => '95000.00',
+            'amount' => '0.01',
+        ]);
+
+        $response = $this->actingAs($user)->getJson('/api/orders?symbol=BTC');
+
+        $response->assertStatus(200)
+            ->assertJsonPath('sell_orders.0.commission', null);
+    });
+
+    it('returns commission based on execution price not order price', function () {
+        $seller = User::factory()->create();
+        $buyer = User::factory()->create();
+
+        // Sell order at 90000 (low price)
+        $sellOrder = Order::factory()->filled()->sell()->create([
+            'user_id' => $seller->id,
+            'symbol_id' => $this->symbol->id,
+            'price' => '90000.00',
+            'amount' => '0.01',
+        ]);
+
+        $buyOrder = Order::factory()->filled()->buy()->create([
+            'user_id' => $buyer->id,
+            'symbol_id' => $this->symbol->id,
+            'price' => '100000.00', // Buyer willing to pay much more
+            'amount' => '0.01',
+        ]);
+
+        // Trade executed at buyer's price (100000)
+        // Commission = 1000 * 0.015 = 15.00
+        Trade::factory()->create([
+            'order_id' => $buyOrder->id,
+            'sell_order_id' => $sellOrder->id,
+            'buyer_id' => $buyer->id,
+            'seller_id' => $seller->id,
+            'symbol_id' => $this->symbol->id,
+            'price' => '100000.00', // Execution price
+            'amount' => '0.01',
+            'commission' => '15.00', // Based on 100000, not 90000
+        ]);
+
+        $response = $this->actingAs($seller)->getJson('/api/orders?symbol=BTC');
+
+        $response->assertStatus(200)
+            // Commission should be 15.00 (based on execution price of 100000)
+            // not 13.50 (which would be based on order price of 90000)
+            ->assertJsonPath('sell_orders.0.commission', '15.000000000000000000');
+    });
+
+    it('calculates higher commission when execution price exceeds sell order price', function () {
+        // This test verifies that when a seller lists at a low price but the trade
+        // executes at a higher buyer price, the commission is based on the higher
+        // execution price (benefiting the platform, but seller still gets more overall)
+
+        $seller = User::factory()->create([
+            'balance' => '0.00',
+        ]);
+
+        $buyer = User::factory()->create([
+            'balance' => '0.00',
+            'locked_balance' => '1000.00', // Locked for buy order at 100000 * 0.01
+        ]);
+
+        Asset::factory()->create([
+            'user_id' => $seller->id,
+            'symbol_id' => $this->symbol->id,
+            'amount' => '0.01', // Available to sell
+            'locked_amount' => '0.0',
+        ]);
+
+        // Existing buy order at 100000 (maker)
+        Order::factory()->open()->buy()->create([
+            'user_id' => $buyer->id,
+            'symbol_id' => $this->symbol->id,
+            'price' => '100000.00',
+            'amount' => '0.01',
+        ]);
+
+        // New sell order at 90000 (taker) - seller is willing to accept less
+        $response = $this->actingAs($seller)->postJson('/api/orders', [
+            'symbol_id' => $this->symbol->id,
+            'side' => Order::SIDE_SELL,
+            'price' => '90000.00',
+            'amount' => '0.01',
+        ]);
+
+        $response->assertStatus(200);
+
+        // Trade should execute at buyer's price (100000)
+        // Trade value: 100000 * 0.01 = 1000 USD
+        // Commission: 1000 * 0.015 = 15 USD (NOT 900 * 0.015 = 13.50)
+        // Seller receives: 1000 - 15 = 985 USD (more than 900 - 13.50 = 886.50 if executed at sell price)
+        $seller->refresh();
+        expect($seller->balance)->toBe('985.000000000000000000');
+
+        // Verify the trade record has correct commission
+        $this->assertDatabaseHas('trades', [
+            'buyer_id' => $buyer->id,
+            'seller_id' => $seller->id,
+            'price' => '100000.000000000000000000',
+            'commission' => '15.000000000000000000',
+        ]);
+    });
+
+    it('returns executed_price for filled sell orders', function () {
+        $seller = User::factory()->create();
+        $buyer = User::factory()->create();
+
+        $sellOrder = Order::factory()->filled()->sell()->create([
+            'user_id' => $seller->id,
+            'symbol_id' => $this->symbol->id,
+            'price' => '94000.00', // Seller's asking price
+            'amount' => '0.01',
+        ]);
+
+        $buyOrder = Order::factory()->filled()->buy()->create([
+            'user_id' => $buyer->id,
+            'symbol_id' => $this->symbol->id,
+            'price' => '95000.00',
+            'amount' => '0.01',
+        ]);
+
+        Trade::factory()->create([
+            'order_id' => $buyOrder->id,
+            'sell_order_id' => $sellOrder->id,
+            'buyer_id' => $buyer->id,
+            'seller_id' => $seller->id,
+            'symbol_id' => $this->symbol->id,
+            'price' => '95000.00', // Execution price (buyer's price)
+            'amount' => '0.01',
+            'commission' => '14.25',
+        ]);
+
+        $response = $this->actingAs($seller)->getJson('/api/orders?symbol=BTC');
+
+        $response->assertStatus(200)
+            ->assertJsonPath('sell_orders.0.price', '94000.000000000000000000') // Original order price
+            ->assertJsonPath('sell_orders.0.executed_price', '95000.000000000000000000'); // Actual execution price
+    });
+
+    it('returns null executed_price for open sell orders', function () {
+        $user = User::factory()->create();
+
+        Order::factory()->open()->sell()->create([
+            'user_id' => $user->id,
+            'symbol_id' => $this->symbol->id,
+            'price' => '95000.00',
+            'amount' => '0.01',
+        ]);
+
+        $response = $this->actingAs($user)->getJson('/api/orders?symbol=BTC');
+
+        $response->assertStatus(200)
+            ->assertJsonPath('sell_orders.0.executed_price', null);
+    });
+
+    it('returns null executed_price for buy orders', function () {
+        $user = User::factory()->create();
+        $otherUser = User::factory()->create();
+
+        $buyOrder = Order::factory()->filled()->buy()->create([
+            'user_id' => $user->id,
+            'symbol_id' => $this->symbol->id,
+            'price' => '95000.00',
+            'amount' => '0.01',
+        ]);
+
+        $sellOrder = Order::factory()->filled()->sell()->create([
+            'user_id' => $otherUser->id,
+            'symbol_id' => $this->symbol->id,
+            'price' => '95000.00',
+            'amount' => '0.01',
+        ]);
+
+        Trade::factory()->create([
+            'order_id' => $buyOrder->id,
+            'sell_order_id' => $sellOrder->id,
+            'buyer_id' => $user->id,
+            'seller_id' => $otherUser->id,
+            'symbol_id' => $this->symbol->id,
+            'price' => '95000.00',
+            'amount' => '0.01',
+            'commission' => '14.25',
+        ]);
+
+        $response = $this->actingAs($user)->getJson('/api/orders?symbol=BTC');
+
+        $response->assertStatus(200)
+            ->assertJsonPath('buy_orders.0.executed_price', null);
+    });
+
+    it('shows executed_price higher than order price when seller gets better deal', function () {
+        $seller = User::factory()->create([
+            'balance' => '0.00',
+        ]);
+
+        $buyer = User::factory()->create([
+            'balance' => '0.00',
+            'locked_balance' => '1000.00',
+        ]);
+
+        Asset::factory()->create([
+            'user_id' => $seller->id,
+            'symbol_id' => $this->symbol->id,
+            'amount' => '0.01',
+            'locked_amount' => '0.0',
+        ]);
+
+        // Existing buy order at 100000 (maker)
+        Order::factory()->open()->buy()->create([
+            'user_id' => $buyer->id,
+            'symbol_id' => $this->symbol->id,
+            'price' => '100000.00',
+            'amount' => '0.01',
+        ]);
+
+        // New sell order at 90000 (taker) - seller willing to accept less
+        $this->actingAs($seller)->postJson('/api/orders', [
+            'symbol_id' => $this->symbol->id,
+            'side' => Order::SIDE_SELL,
+            'price' => '90000.00',
+            'amount' => '0.01',
+        ]);
+
+        // Get orders for seller
+        $response = $this->actingAs($seller)->getJson('/api/orders?symbol=BTC');
+
+        $response->assertStatus(200);
+
+        $sellOrders = $response->json('sell_orders');
+        expect($sellOrders)->toHaveCount(1);
+        expect($sellOrders[0]['price'])->toBe('90000.000000000000000000'); // What they asked for
+        expect($sellOrders[0]['executed_price'])->toBe('100000.000000000000000000'); // What they got
+        expect($sellOrders[0]['commission'])->toBe('15.000000000000000000'); // 1000 * 0.015
     });
 
     it('requires symbol parameter', function () {

@@ -24,7 +24,8 @@ class OrderService
     {
         $symbol = Symbol::where('name', $symbol)->first();
 
-        $orders = Order::where('symbol_id', $symbol->id)
+        $orders = Order::with('sellTrade')
+            ->where('symbol_id', $symbol->id)
             ->where('user_id', $user->id)
             ->orderBy('price', 'desc')
             ->orderBy('created_at', 'asc')
@@ -36,6 +37,7 @@ class OrderService
                 'amount' => $order->amount,
                 'status' => $order->status->value,
                 'commission' => $order->sell_commission,
+                'executed_price' => $order->sell_execution_price,
                 'created_at' => $order->created_at->toIso8601String(),
             ]);
 
@@ -209,6 +211,7 @@ class OrderService
         // Create trade record
         $trade = Trade::create([
             'order_id' => $buyOrder->id,
+            'sell_order_id' => $sellOrder->id,
             'buyer_id' => $buyer->id,
             'seller_id' => $seller->id,
             'symbol_id' => $buyOrder->symbol_id,

@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Order extends Model
 {
@@ -72,7 +73,15 @@ class Order extends Model
     }
 
     /**
-     * Get the commission for a sell order by finding the trade where user is seller.
+     * Get the trade for this order (as sell order).
+     */
+    public function sellTrade(): HasOne
+    {
+        return $this->hasOne(Trade::class, 'sell_order_id');
+    }
+
+    /**
+     * Get the commission for a sell order.
      */
     public function getSellCommissionAttribute(): ?string
     {
@@ -80,11 +89,20 @@ class Order extends Model
             return null;
         }
 
-        return Trade::where('seller_id', $this->user_id)
-            ->where('symbol_id', $this->symbol_id)
-            ->where('amount', $this->amount)
-            ->where('price', $this->price)
-            ->value('commission');
+        return $this->sellTrade?->commission;
+    }
+
+    /**
+     * Get the execution price for a sell order.
+     * This may differ from the order price when the trade executes at the buyer's price.
+     */
+    public function getSellExecutionPriceAttribute(): ?string
+    {
+        if ($this->side !== self::SIDE_SELL) {
+            return null;
+        }
+
+        return $this->sellTrade?->price;
     }
 }
 
