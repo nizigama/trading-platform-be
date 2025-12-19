@@ -22,6 +22,7 @@ class Trade extends Model
         'symbol_id',
         'price',
         'amount',
+        'commission',
     ];
 
     /**
@@ -34,6 +35,7 @@ class Trade extends Model
         return [
             'price' => 'decimal:18',
             'amount' => 'decimal:18',
+            'commission' => 'decimal:18',
         ];
     }
 

@@ -64,11 +64,27 @@ class Order extends Model
     }
 
     /**
-     * Get the trades for this order.
+     * Get the trades for this order (as buy order).
      */
     public function trades(): HasMany
     {
         return $this->hasMany(Trade::class);
+    }
+
+    /**
+     * Get the commission for a sell order by finding the trade where user is seller.
+     */
+    public function getSellCommissionAttribute(): ?string
+    {
+        if ($this->side !== self::SIDE_SELL) {
+            return null;
+        }
+
+        return Trade::where('seller_id', $this->user_id)
+            ->where('symbol_id', $this->symbol_id)
+            ->where('amount', $this->amount)
+            ->where('price', $this->price)
+            ->value('commission');
     }
 }
 

@@ -123,4 +123,5 @@ return [
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
 
+    'sale_commission_rate' => env('COMMISSION_RATE', '0.015'),
 ];

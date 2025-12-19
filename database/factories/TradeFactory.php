@@ -22,13 +22,18 @@ class TradeFactory extends Factory
      */
     public function definition(): array
     {
+        $price = fake()->randomFloat(8, 100, 50000);
+        $amount = fake()->randomFloat(8, 0.001, 10);
+        $commission = $price * $amount * 0.015;
+
         return [
             'order_id' => Order::factory(),
             'buyer_id' => User::factory(),
             'seller_id' => User::factory(),
             'symbol_id' => Symbol::factory(),
-            'price' => fake()->randomFloat(8, 100, 50000),
-            'amount' => fake()->randomFloat(8, 0.001, 10),
+            'price' => $price,
+            'amount' => $amount,
+            'commission' => $commission,
         ];
     }
 }

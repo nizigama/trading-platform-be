@@ -1,8 +1,11 @@
 <?php
 
+use App\Exceptions\InsufficientBalanceException;
+use App\Exceptions\OrderException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Request;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -15,5 +18,15 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->statefulApi();
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        $exceptions->render(function (InsufficientBalanceException $e, Request $request) {
+            return response()->json([
+                'message' => $e->getMessage(),
+            ], 400);
+        });
+
+        $exceptions->render(function (OrderException $e, Request $request) {
+            return response()->json([
+                'message' => $e->getMessage(),
+            ], 400);
+        });
     })->create();
