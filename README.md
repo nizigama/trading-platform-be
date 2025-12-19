@@ -56,5 +56,10 @@ docker run --rm \
     PUSHER_SCHEME=https
     ```
 
+- Run the queues so that orders are matched, trades are executed and notifications are sent
+    ```shell
+    vendor/bin/sail artisan queue:work
+    ```
+
 The frontend is a Vue 3 application available here https://github.com/nizigama/trading-platform-fe, check its README for setup instructions.
 The API will be available at http://localhost:8975 and the frontend will be available at http://localhost:5173 unless the port is not available and vite assigned the frontend app a new one, in that case remember to update the variables `FRONTEND_URL` and `SANCTUM_STATEFUL_DOMAINS` in the .env file of this api app accordingly.
